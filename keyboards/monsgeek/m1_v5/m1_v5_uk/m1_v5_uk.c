@@ -1113,15 +1113,29 @@ void bat_indicators(void) {
         rgb_matrix_hs_bat_set(HS_MATRIX_BLINK_INDEX_BAT, (RGB){0xFF, 0x00, 0x00}, 250, 1);
 
         if (*md_getp_bat() <= BATTERY_CAPACITY_STOP) {
+            // [akko-hub fix] El valor de batería llega del módulo inalámbrico por UART sin validar.
+            // Una lectura espuria de 0 % (módulo recién despierto, enlace inestable) activaba
+            // lower_sleep y el teclado dormía sin poder despertar por teclado hasta cortar la
+            // batería. Exigir que el 0 % sea persistente (60 s y >30 lecturas) y que el módulo
+            // esté conectado.
+            extern uint8_t *md_getp_state(void);
+            static uint16_t zero_streak = 0;
             if (!battery_process_time) {
                 battery_process_time = timer_read32();
+                zero_streak          = 0;
             }
+            if (zero_streak < 0xFFFF) zero_streak++;
 
             if (battery_process_time && timer_elapsed32(battery_process_time) > 60000) {
                 battery_process_time = 0;
-                lower_sleep          = true;
-                lpwr_set_timeout_manual(true);
+                if (*md_getp_state() == MD_STATE_CONNECTED && zero_streak > 30) {
+                    lower_sleep = true;
+                    lpwr_set_timeout_manual(true);
+                }
+                zero_streak = 0;
             }
+        } else {
+            battery_process_time = 0; // [akko-hub fix] 1-15 %: batería baja, pero no agotada
         }
     } else {
         battery_process_time = 0;

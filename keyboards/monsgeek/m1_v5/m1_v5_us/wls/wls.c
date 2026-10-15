@@ -129,16 +129,12 @@ void lpwr_exti_init_hook(void) {
     palEnableLineEvent(HS_2G4_DEF_PIN, PAL_EVENT_MODE_BOTH_EDGES);
 #endif
 
-    if (lower_sleep) {
-#if DIODE_DIRECTION == ROW2COL
-        for (uint8_t i = 0; i < ARRAY_SIZE(col_pins); i++) {
-            if (col_pins[i] != NO_PIN) {
-                setPinOutput(col_pins[i]);
-                writePinHigh(col_pins[i]);
-            }
-        }
-#endif
-    }
+    // [akko-hub fix] El código original, con lower_sleep, ponía las columnas en ALTO al dormir,
+    // lo que impide que una pulsación genere el flanco de bajada que despierta al MCU. Se mantiene
+    // la configuración de lpwr_exti_init (columnas en bajo, filas con interrupción): el teclado
+    // siempre puede despertar pulsando una tecla, también en "lower_sleep".
+    (void)lower_sleep;
+    (void)col_pins;
     setPinInput(HS_BAT_CABLE_PIN);
     waitInputPinDelay();
     palEnableLineEvent(HS_BAT_CABLE_PIN, PAL_EVENT_MODE_RISING_EDGE);
@@ -181,15 +177,11 @@ void lpwr_stop_hook_pre(void) {
 
 void lpwr_stop_hook_post(void) {
     if (lower_sleep) {
-        switch (lpwr_get_sleep_wakeupcd()) {
-            case LPWR_WAKEUP_USB:
-            case LPWR_WAKEUP_CABLE: {
-                lower_sleep = false;
-                lpwr_set_state(LPWR_WAKEUP);
-            } break;
-            default: {
-                lpwr_set_state(LPWR_STOP);
-            } break;
-        }
+        // [akko-hub fix] El original volvía a dormir el teclado si despertaba por algo que no fuera
+        // cable/USB (p. ej. una tecla), dejándolo inutilizable hasta cortar la batería. Ahora
+        // cualquier despertar lo saca del modo lower_sleep; si la batería está realmente agotada,
+        // bat_indicators() lo volverá a dormir a los 60 s por el camino normal.
+        lower_sleep = false;
+        lpwr_set_state(LPWR_WAKEUP);
     }
 }
