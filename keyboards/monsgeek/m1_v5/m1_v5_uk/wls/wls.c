@@ -93,13 +93,19 @@ bool hs_rgb_blink_hook() {
                 extern void wireless_devs_change_kb(uint8_t old_devs, uint8_t new_devs, bool reset);
                 wireless_devs_change_kb(wireless_get_current_devs(), wireless_get_current_devs(), false);
             } else {
-                if (timer_elapsed32(hs_rgb_blink_get_timer()) >= HS_LBACK_TIMEOUT) {
+                // [akko-hub fix] Mientras el usuario teclea, seguir buscando el dongle: cada
+                // pulsación reinicia la cuenta. Solo se duerme tras HS_LBACK_TIMEOUT sin teclas
+                // Y sin enlace.
+                if (last_input_activity_elapsed() < 2000) {
+                    hs_rgb_blink_set_timer(timer_read32());
+                } else if (timer_elapsed32(hs_rgb_blink_get_timer()) >= HS_LBACK_TIMEOUT) {
                     hs_rgb_blink_set_timer(timer_read32());
                     md_send_devctrl(MD_SND_CMD_DEVCTRL_USB);
                     wait_ms(200);
                     lpwr_set_timeout_manual(true);
                 }
             }
+            break; // [akko-hub fix] el original caía en CONNECTED y aplicaba también el reposo por inactividad
         case MD_STATE_CONNECTED:
             if (hs_rgb_blink_get_timer() == 0x00) {
                 hs_rgb_blink_set_timer(timer_read32());
