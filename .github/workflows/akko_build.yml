@@ -18,6 +18,13 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      # El fork de MonsGeek es una versión antigua de QMK: instalar sus dependencias de Python
+      # en el entorno de la CLI de la imagen.
+      - name: Dependencias de Python
+        run: |
+          PY=/opt/uv/tools/qmk/bin/python3
+          uv pip install --python "$PY" -r requirements.txt || "$PY" -m pip install -r requirements.txt
+
       - name: Compilar
         run: |
           git config --global --add safe.directory '*'
