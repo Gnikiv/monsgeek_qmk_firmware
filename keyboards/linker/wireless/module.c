@@ -118,12 +118,26 @@ void md_receive_raw_cb(uint8_t *pdata, uint8_t len) {}
 void md_receive_host_cb(bool resume) __attribute__((weak));
 void md_receive_host_cb(bool resume) {}
 
+#ifndef MD_REV_FRAME_TIMEOUT
+// [akko-hub fix] Una trama de 36 bytes tarda ~3 ms a 115200 baudios. Si tras este tiempo no ha
+// llegado el resto, se da por perdida y se vuelve a buscar el inicio de trama.
+#    define MD_REV_FRAME_TIMEOUT 100
+#endif
+
 static void md_receive_msg_task(void) {
     static uint32_t data_count = 0x00;
     static uint8_t data_remain = 0x00;
+    static uint32_t last_rx    = 0x00;
 
     while (uart_available()) {
         uint8_t data = uart_read();
+
+        // [akko-hub fix] Sin esto, una trama incompleta se tragaba las siguientes hasta que fallaba la
+        // suma (consultas VIA perdidas a media conversación).
+        if (data_count && timer_elapsed32(last_rx) > MD_REV_FRAME_TIMEOUT) {
+            data_count = 0;
+        }
+        last_rx = timer_read32();
 
         switch (data_count) {
             case 0: { // cmd
@@ -161,12 +175,23 @@ static void md_receive_msg_task(void) {
 
                 // raw data
                 if ((md_rev_payload[0] == MD_REV_CMD_RAW) && (md_rev_payload[1] == MD_REV_CMD_RAW_OUT)) {
+                    // [akko-hub fix] El original aceptaba cualquier longitud y escribía hasta ~220 bytes
+                    // fuera de md_rev_payload[36] si el byte llegaba corrupto. Solo existen tramas de 32.
+                    if (data != MD_RAW_SIZE) {
+                        data_count = 0;
+                        continue;
+                    }
                     md_rev_payload[data_count++] = data;
                     data_remain                  = data + 1;
                     continue;
                 }
             }
             default: {
+                // [akko-hub fix] Nunca escribir fuera del búfer, venga lo que venga por la UART.
+                if (data_count >= sizeof(md_rev_payload)) {
+                    data_count = 0;
+                    continue;
+                }
                 md_rev_payload[data_count++] = data;
                 data_remain--;
 
