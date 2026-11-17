@@ -1,0 +1,31 @@
+# Compila el firmware del MonsGeek M1 V5 VIA con los parches de Akko Hub.
+# Se lanza al subir a la rama akko-hub o a mano desde la pestaña Actions.
+# El .bin queda como artefacto del run (Actions → run → Artifacts).
+name: Akko Hub firmware
+
+on:
+  push:
+    branches: [akko-hub]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/qmk/qmk_cli
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Compilar
+        run: |
+          git config --global --add safe.directory '*'
+          make monsgeek/m1_v5/m1_v5_uk:default monsgeek/m1_v5/m1_v5_us:default
+          ls -la *.bin
+          sha256sum *.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m1_v5-firmware-${{ github.sha }}
+          path: '*.bin'
